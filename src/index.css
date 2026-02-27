@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 6%;
+    --foreground: 210 20% 90%;
+
+    --card: 222 41% 9%;
+    --card-foreground: 210 20% 90%;
+
+    --popover: 222 41% 9%;
+    --popover-foreground: 210 20% 90%;
+
+    --primary: 174 72% 52%;
+    --primary-foreground: 222 47% 6%;
+
+    --secondary: 222 30% 15%;
+    --secondary-foreground: 210 20% 80%;
+
+    --muted: 222 25% 13%;
+    --muted-foreground: 215 15% 50%;
+
+    --accent: 160 60% 45%;
+    --accent-foreground: 222 47% 6%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 25% 16%;
+    --input: 222 25% 16%;
+    --ring: 174 72% 52%;
+
+    --radius: 0.5rem;
+
+    --bullish: 160 60% 45%;
+    --bearish: 0 72% 55%;
+    --warning: 38 92% 50%;
+    --info: 210 80% 60%;
+
+    --sidebar-background: 222 41% 8%;
+    --sidebar-foreground: 210 20% 80%;
+    --sidebar-primary: 174 72% 52%;
+    --sidebar-primary-foreground: 222 47% 6%;
+    --sidebar-accent: 222 30% 15%;
+    --sidebar-accent-foreground: 210 20% 80%;
+    --sidebar-border: 222 25% 16%;
+    --sidebar-ring: 174 72% 52%;
+
+    --chart-1: 174 72% 52%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 72% 55%;
+    --chart-5: 210 80% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .glow-primary {
+    box-shadow: 0 0 20px hsl(174 72% 52% / 0.15), 0 0 60px hsl(174 72% 52% / 0.05);
+  }
+
+  .glow-bullish {
+    box-shadow: 0 0 12px hsl(160 60% 45% / 0.3);
+  }
+
+  .glow-bearish {
+    box-shadow: 0 0 12px hsl(0 72% 55% / 0.3);
+  }
+
+  .text-bullish {
+    color: hsl(var(--bullish));
+  }
+
+  .text-bearish {
+    color: hsl(var(--bearish));
+  }
+
+  .text-warning {
+    color: hsl(var(--warning));
+  }
+
+  .bg-bullish {
+    background-color: hsl(var(--bullish));
+  }
+
+  .bg-bearish {
+    background-color: hsl(var(--bearish));
+  }
+
+  .bg-warning {
+    background-color: hsl(var(--warning));
+  }
+
+  .bg-bullish\/10 {
+    background-color: hsl(var(--bullish) / 0.1);
+  }
+
+  .bg-bearish\/10 {
+    background-color: hsl(var(--bearish) / 0.1);
+  }
+
+  .border-bullish {
+    border-color: hsl(var(--bullish));
+  }
+
+  .border-bearish {
+    border-color: hsl(var(--bearish));
+  }
+
+  .score-gauge {
+    background: conic-gradient(
+      hsl(var(--primary)) calc(var(--score) * 1%),
+      hsl(var(--muted)) calc(var(--score) * 1%)
+    );
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-ticker {
+    animation: ticker 30s linear infinite;
+  }
+
+  @keyframes ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+}

@@ -1,73 +1,107 @@
-# Welcome to your Lovable project
+# Stockinator - Multi-Agent Trading Platform
 
-## Project info
+## Motive
+Stockinator is built to democratize institutional-grade algorithmic trading for retail users through an autonomous, transparent, and risk-first multi-agent system.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+Core goals:
 
-## How can I edit this code?
+1. Eliminate emotional trading with rule-based execution.
+2. Combine technical, sentiment, and ML intelligence into one decision score.
+3. Preserve user control through manual override and kill-switch style operation.
+4. Support Indian market constraints such as brokerage and risk caps.
+5. Keep capital preservation as the first system priority.
 
-There are several ways of editing your application.
+## High-Level Workflow
 
-**Use Lovable**
+1. Scraping Agent gathers prices, news, and sentiment.
+2. Algo Agent computes indicator/pattern consensus.
+3. Prediction Agent computes success score.
+4. Orchestrator validates score, costs, cooldown, and limits.
+5. Trade Agent prepares executable order plan.
+6. Risk Monitor enforces daily and position-level limits.
+7. Memory Agent stores decisions and outcomes for learning loops.
+8. Frontend shows realtime status, scores, and controls.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Project Structure
 
-Changes made via Lovable will be committed automatically to this repo.
+```text
+Stockinator/
+	backend/
+		app/
+			agents/
+				scraping_agent.py
+				algo_agent.py
+				prediction_agent.py
+				trade_agent.py
+				memory_agent.py
+			orchestrator/
+				runtime.py
+			risk/
+				monitor.py
+			memory/
+				store.py
+			api/
+				v1/
+					endpoints/
+						control.py
+						data.py
+						trades.py
+						ws.py
+						system.py
+			services/
+			models/
+			schemas/
+			main.py
+		requirements.txt
+	frontend/
+		src/
+			components/
+			pages/
+				SystemControl.tsx
+			features/
+				dashboard/
+					components/
+						AgentCycleCard.tsx
+					hooks/
+						useSystemWorkflow.ts
+					types.ts
+			lib/
+				backendApi.ts
+			App.tsx
+```
 
-**Use your preferred IDE**
+## Start Backend
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Start Frontend
 
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```powershell
+cd frontend
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Validation Commands
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```powershell
+# Frontend build
+cd frontend
+npm run build
 
-**Use GitHub Codespaces**
+# Backend syntax check
+cd ..\backend
+python -m compileall app
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Notes
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+1. The previous duplicate multi-agent folder tree has been removed and consolidated into backend + frontend.
+2. System workflow endpoints are available under /api/v1/system.
+3. The System Control page is available at /system.

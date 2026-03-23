@@ -350,3 +350,15 @@ def get_all_nse_stocks():
         "VEDANTA", "VEDL", "VEEOBIOTECH", "VEER", "VEERKRUPA", "VEGIS", "VEGUSTA",
         "VELJAN", "VELS", "VENKEYS", "VENLON", "VENSONS", "VENTUREQ", "VENUSREM",
         "VENZGROUP", "VENTURA", "VERA", "VERDL", "VERISCHEM", "VERSATILE"
+    ]
+
+    stocks.extend(stocks_q_to_z)
+
+    # Return normalized unique symbols in deterministic order.
+    cleaned = [s.strip().upper() for s in stocks if isinstance(s, str) and s.strip()]
+    return sorted(set(cleaned))
+
+
+def get_comprehensive_nse_stocks():
+    """Backward-compatible alias used by historical download scripts."""
+    return get_all_nse_stocks()

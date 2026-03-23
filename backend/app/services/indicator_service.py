@@ -8,13 +8,85 @@ try:
     TALIB_AVAILABLE = True
 except ImportError:
     TALIB_AVAILABLE = False
-    print("⚠️  TA-Lib not installed. Indicator calculations will be limited.")
+    print("[WARNING] TA-Lib not installed. Indicator calculations will be limited.")
 
 from app.core.exceptions import InvalidIndicatorError
 
 
 class IndicatorService:
     """Service for calculating technical indicators"""
+
+    def _calculate_all_indicators_fallback(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Pandas/numpy fallback when TA-Lib is unavailable."""
+        out = df.copy()
+
+        close = out["close"]
+        high = out["high"]
+        low = out["low"]
+        volume = out["volume"]
+
+        out["sma_20"] = close.rolling(window=20, min_periods=1).mean()
+        out["sma_50"] = close.rolling(window=50, min_periods=1).mean()
+        out["sma_200"] = close.rolling(window=200, min_periods=1).mean()
+        out["ema_12"] = close.ewm(span=12, adjust=False).mean()
+        out["ema_26"] = close.ewm(span=26, adjust=False).mean()
+
+        delta = close.diff().fillna(0.0)
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+        avg_gain = gain.rolling(window=14, min_periods=14).mean()
+        avg_loss = loss.rolling(window=14, min_periods=14).mean()
+        rs = avg_gain / avg_loss.replace(0, np.nan)
+        out["rsi"] = (100 - (100 / (1 + rs))).fillna(50.0)
+
+        out["macd"] = out["ema_12"] - out["ema_26"]
+        out["macd_signal"] = out["macd"].ewm(span=9, adjust=False).mean()
+        out["macd_histogram"] = out["macd"] - out["macd_signal"]
+
+        lowest_low = low.rolling(window=14, min_periods=1).min()
+        highest_high = high.rolling(window=14, min_periods=1).max()
+        denom = (highest_high - lowest_low).replace(0, np.nan)
+        out["stochastic_k"] = (((close - lowest_low) / denom) * 100).fillna(50.0)
+        out["stochastic_d"] = out["stochastic_k"].rolling(window=3, min_periods=1).mean()
+        out["roc"] = (close.pct_change(periods=10) * 100).fillna(0.0)
+
+        out["bollinger_middle"] = close.rolling(window=20, min_periods=1).mean()
+        rolling_std = close.rolling(window=20, min_periods=1).std().fillna(0.0)
+        out["bollinger_upper"] = out["bollinger_middle"] + (2 * rolling_std)
+        out["bollinger_lower"] = out["bollinger_middle"] - (2 * rolling_std)
+
+        tr_components = pd.concat(
+            [
+                (high - low).abs(),
+                (high - close.shift(1)).abs(),
+                (low - close.shift(1)).abs(),
+            ],
+            axis=1,
+        )
+        true_range = tr_components.max(axis=1)
+        out["atr"] = true_range.rolling(window=14, min_periods=1).mean().fillna(0.0)
+
+        direction = np.sign(close.diff().fillna(0.0))
+        out["obv"] = (direction * volume).cumsum().fillna(0.0)
+        typical_price = (high + low + close) / 3
+        out["vwap"] = (typical_price * volume).cumsum() / volume.cumsum().replace(0, np.nan)
+        out["vwap"] = out["vwap"].fillna(close)
+
+        plus_dm = high.diff()
+        minus_dm = -low.diff()
+        plus_dm = plus_dm.where((plus_dm > minus_dm) & (plus_dm > 0), 0.0)
+        minus_dm = minus_dm.where((minus_dm > plus_dm) & (minus_dm > 0), 0.0)
+
+        atr_for_adx = out["atr"].replace(0, np.nan)
+        plus_di = (100 * (plus_dm.rolling(window=14, min_periods=1).sum() / atr_for_adx)).fillna(0.0)
+        minus_di = (100 * (minus_dm.rolling(window=14, min_periods=1).sum() / atr_for_adx)).fillna(0.0)
+        dx = (100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)).fillna(0.0)
+
+        out["adx"] = dx.rolling(window=14, min_periods=1).mean().fillna(25.0)
+        out["adx_pos"] = plus_di
+        out["adx_neg"] = minus_di
+
+        return out
     
     def calculate_all_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -26,12 +98,12 @@ class IndicatorService:
         Returns:
             DataFrame with all indicator columns added
         """
-        if not TALIB_AVAILABLE:
-            print("⚠️  Skipping indicator calculation - TA-Lib not installed")
-            return df  # Return dataframe as-is without indicators
-            
-        if df.empty or len(df) < 200:
+        if df.empty or len(df) < 30:
             raise InvalidIndicatorError("Insufficient data for indicator calculation")
+
+        if not TALIB_AVAILABLE:
+            print("[WARNING] TA-Lib not installed. Using pandas fallback indicators")
+            return self._calculate_all_indicators_fallback(df)
         
         df = df.copy()
         

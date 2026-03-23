@@ -164,13 +164,33 @@ def backtest_strategy(symbol: str, days: int = 30):
         symbol: Trading symbol
         days: Number of days to backtest
     """
-    # This would implement backtesting logic
-    # Placeholder for now
     print(f"🔄 Backtesting {symbol} for {days} days...")
-    
-    return {
-        "status": "completed",
-        "symbol": symbol,
-        "days": days,
-        "message": "Backtest functionality to be implemented"
-    }
+
+    try:
+        from scripts.backtest import backtest
+
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+
+        backtest(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=100000.0,
+            threshold=80.0,
+        )
+
+        return {
+            "status": "completed",
+            "symbol": symbol,
+            "days": days,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "symbol": symbol,
+            "days": days,
+            "message": str(e),
+        }

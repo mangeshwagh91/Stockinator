@@ -47,7 +47,18 @@ trading_active = False
 @router.get("/status", response_model=SystemStatus)
 async def get_system_status(db: Session = Depends(get_database)):
     """Get current system status"""
-    risk_metrics = risk_manager.get_risk_metrics(db)
+    try:
+        risk_metrics = risk_manager.get_risk_metrics(db)
+    except Exception:
+        risk_metrics = {
+            "today_pnl": 0,
+            "max_daily_loss": risk_manager.max_daily_loss,
+            "daily_loss_used_pct": 0,
+            "open_positions": 0,
+            "max_open_positions": risk_manager.max_open_positions,
+            "max_position_size": risk_manager.max_position_size,
+            "risk_per_trade_pct": risk_manager.risk_per_trade * 100,
+        }
     
     return SystemStatus(
         trading_active=trading_active,

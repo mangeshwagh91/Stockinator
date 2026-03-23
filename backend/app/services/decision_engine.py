@@ -4,8 +4,8 @@ from typing import Optional, Dict
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.exceptions import CooldownActiveError, RiskLimitExceededError
-from app.models.trade import Trade, TradeType
+from app.core.exceptions import RiskLimitExceededError
+from app.models.trade import Trade
 from app.services.risk_manager import risk_manager
 
 
@@ -23,7 +23,9 @@ class DecisionEngine:
         success_score: float,
         current_price: float,
         db: Session,
-        features: Dict[str, float]
+        features: Dict[str, float],
+        component_scores: Optional[Dict[str, float]] = None,
+        direction_hint: Optional[str] = None,
     ) -> Dict:
         """
         Evaluate whether to place a trade
@@ -43,20 +45,26 @@ class DecisionEngine:
             "action": "HOLD",
             "reason": [],
             "success_score": success_score,
+            "final_score": success_score,
+            "component_scores": component_scores or {"ml": success_score},
             "quantity": 0,
             "stop_loss": None,
             "take_profit": None
         }
+
+        # Build final score from multiple agent/component scores when provided.
+        final_score = self._combine_scores(component_scores, success_score)
+        decision["final_score"] = final_score
         
         # Check 1: Score threshold
-        if success_score < self.threshold:
-            decision["reason"].append(f"Score {success_score:.1f} below threshold {self.threshold}")
+        if final_score < self.threshold:
+            decision["reason"].append(f"Final score {final_score:.1f} below threshold {self.threshold}")
             return decision
         
         # Check 2: Cooldown period
         if not self._check_cooldown(symbol, db):
             decision["reason"].append(f"Cooldown active (last trade < {self.cooldown_minutes} min ago)")
-            raise CooldownActiveError(f"Cooldown period active for {symbol}")
+            return decision
         
         # Check 3: Risk limits
         try:
@@ -71,7 +79,7 @@ class DecisionEngine:
             return decision
         
         # Check 4: Expected profit vs costs
-        expected_profit = self._estimate_profit(success_score, current_price, position_size)
+        expected_profit = self._estimate_profit(final_score, current_price, position_size)
         costs = self._calculate_costs(current_price, position_size)
         
         if expected_profit <= costs + self.min_expected_profit:
@@ -82,16 +90,67 @@ class DecisionEngine:
         
         # All checks passed - generate trade signal
         decision["should_trade"] = True
-        decision["action"] = "BUY"  # Currently only supporting long positions
+        decision["action"] = self._resolve_action(direction_hint, component_scores)
         decision["quantity"] = position_size / current_price
         decision["reason"].append("All conditions met for trade")
         
         # Calculate stop loss and take profit
         atr = features.get('atr', current_price * 0.02)
-        decision["stop_loss"] = current_price - (2 * atr)  # 2 ATR stop loss
-        decision["take_profit"] = current_price + (3 * atr)  # 3 ATR take profit (1.5:1 R:R)
+        if decision["action"] == "SELL":
+            decision["stop_loss"] = current_price + (2 * atr)  # 2 ATR stop loss (short)
+            decision["take_profit"] = current_price - (3 * atr)  # 3 ATR take profit (short)
+        else:
+            decision["stop_loss"] = current_price - (2 * atr)  # 2 ATR stop loss (long)
+            decision["take_profit"] = current_price + (3 * atr)  # 3 ATR take profit (long)
         
         return decision
+
+    def _combine_scores(self, component_scores: Optional[Dict[str, float]], fallback_score: float) -> float:
+        """Combine multiple component scores into one weighted final score."""
+        if not component_scores:
+            return float(max(0, min(100, fallback_score)))
+
+        weights = {
+            "ml": 0.50,
+            "news": 0.20,
+            "algo": 0.20,
+            "regime": 0.10,
+        }
+
+        weighted_sum = 0.0
+        total_weight = 0.0
+
+        for key, weight in weights.items():
+            if key in component_scores and component_scores[key] is not None:
+                value = float(component_scores[key])
+                bounded_value = max(0.0, min(100.0, value))
+                weighted_sum += bounded_value * weight
+                total_weight += weight
+
+        if total_weight == 0:
+            return float(max(0, min(100, fallback_score)))
+
+        return weighted_sum / total_weight
+
+    def _resolve_action(
+        self,
+        direction_hint: Optional[str],
+        component_scores: Optional[Dict[str, float]],
+    ) -> str:
+        """Resolve trade direction with optional hint and directional score bias."""
+        if direction_hint in {"BUY", "SELL"}:
+            return direction_hint
+
+        if not component_scores:
+            return "BUY"
+
+        # Bias short only when both news and algo components are clearly bearish.
+        news_score = component_scores.get("news", 50)
+        algo_score = component_scores.get("algo", 50)
+        if news_score < 40 and algo_score < 40:
+            return "SELL"
+
+        return "BUY"
     
     def _check_cooldown(self, symbol: str, db: Session) -> bool:
         """

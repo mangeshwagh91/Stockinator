@@ -138,3 +138,14 @@ async def broadcast_error(error_message: str):
         "message": error_message,
         "timestamp": datetime.now().isoformat()
     })
+
+async def broadcast_tick(symbol: str, price: float, volume: int = 0, timestamp: str | None = None):
+    """Broadcast high-frequency market tick to all clients"""
+    await manager.broadcast_json({
+        "type": "tick",
+        "symbol": symbol,
+        "price": price,
+        "volume": volume,
+        "timestamp": timestamp or datetime.now().isoformat()
+    })
+

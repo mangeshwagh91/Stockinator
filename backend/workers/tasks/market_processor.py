@@ -1,5 +1,4 @@
 """Market data processor - consumes market data and runs trading pipeline"""
-import json
 from datetime import datetime
 from sqlalchemy.orm import Session
 
@@ -10,6 +9,7 @@ from app.services.indicator_service import indicator_service
 from app.services.ml_service import ml_service
 from app.services.news_service import news_service
 from app.services.decision_engine import decision_engine
+from app.services.strategies import strategy_registry
 from app.services.broker_service import broker_service
 from app.models.signal import Signal
 from app.models.trade import Trade, TradeType, TradeStatus
@@ -57,6 +57,21 @@ def process_market_candle(symbol: str, interval: str, candle_data: dict):
         
         # Step 5: Calculate success score using ML model
         success_score = ml_service.predict_success_score(features, sentiment_score)
+
+        # Step 5b: Evaluate algo strategies (ensemble)
+        strategy_eval = strategy_registry.evaluate(
+            features=features,
+            sentiment_score=sentiment_score,
+        )
+
+        # Build multi-agent component scores in 0-100 range.
+        component_scores = {
+            "ml": success_score,
+            "news": max(0.0, min(100.0, (sentiment_score + 1.0) * 50.0)),
+            "algo": strategy_eval["algo_score"],
+            "regime": max(0.0, min(100.0, (features.get("adx", 25.0) / 50.0) * 100.0)),
+        }
+        direction_hint = strategy_eval["direction_hint"]
         
         print(f"🎯 Success score for {symbol}: {success_score:.2f}")
         
@@ -66,7 +81,10 @@ def process_market_candle(symbol: str, interval: str, candle_data: dict):
             interval=interval,
             success_score=success_score,
             threshold=decision_engine.threshold,
-            features=features,
+            features={
+                **features,
+                "strategy_breakdown": strategy_eval["breakdown"],
+            },
             rsi=features.get('rsi'),
             macd=features.get('macd'),
             macd_signal=features.get('macd_signal'),
@@ -107,11 +125,13 @@ def process_market_candle(symbol: str, interval: str, candle_data: dict):
                 success_score=success_score,
                 current_price=current_price,
                 db=db,
-                features=features
+                features=features,
+                component_scores=component_scores,
+                direction_hint=direction_hint,
             )
             
             signal.action = decision['action']
-            signal.confidence = success_score
+            signal.confidence = decision.get('final_score', success_score)
             
             if decision['should_trade']:
                 # Execute trade
@@ -131,6 +151,7 @@ def process_market_candle(symbol: str, interval: str, candle_data: dict):
                 return {
                     "status": "traded",
                     "score": success_score,
+                    "final_score": decision.get('final_score', success_score),
                     "trade_id": trade_result['trade_id']
                 }
             else:
@@ -139,6 +160,7 @@ def process_market_candle(symbol: str, interval: str, candle_data: dict):
                 return {
                     "status": "no_trade",
                     "score": success_score,
+                    "final_score": decision.get('final_score', success_score),
                     "reason": decision['reason']
                 }
         

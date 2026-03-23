@@ -11,22 +11,36 @@ from app.api.v1 import api_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle handler for startup and shutdown events"""
+    app.state.db_connected = False
+    app.state.influx_connected = False
+    app.state.redis_connected = False
+
     # Startup
     print("🚀 Starting Stockinator Backend...")
     
     # Initialize databases
-    init_db()
+    try:
+        init_db()
+        app.state.db_connected = True
+    except Exception as e:
+        print(f"⚠ Database init failed: {e}")
     
     # Try to connect to InfluxDB (optional for development)
     try:
         influx_db.connect()
+        app.state.influx_connected = True
         print("✓ InfluxDB connected")
     except Exception as e:
         print(f"⚠ InfluxDB not available: {e}")
     
-    redis_manager.connect()
+    try:
+        redis_manager.connect()
+        app.state.redis_connected = True
+        print("✓ Redis connected")
+    except Exception as e:
+        print(f"⚠ Redis not available: {e}")
     
-    print("✓ Databases connected")
+    print("✓ Backend dependency check complete")
     
     # Try to load ML model
     try:
@@ -41,8 +55,10 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     print("Shutting down...")
-    influx_db.disconnect()
-    redis_manager.disconnect()
+    if app.state.influx_connected:
+        influx_db.disconnect()
+    if app.state.redis_connected:
+        redis_manager.disconnect()
 
 
 app = FastAPI(
@@ -79,8 +95,8 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {
-        "status": "healthy",
-        "database": "connected",
-        "influxdb": "connected",
-        "redis": "connected"
+        "status": "healthy" if app.state.db_connected else "degraded",
+        "database": "connected" if app.state.db_connected else "disconnected",
+        "influxdb": "connected" if app.state.influx_connected else "disconnected",
+        "redis": "connected" if app.state.redis_connected else "disconnected"
     }

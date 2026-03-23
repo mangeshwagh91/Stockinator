@@ -11,6 +11,7 @@ from alpaca.data.timeframe import TimeFrame
 
 from app.core.config import settings
 from app.core.database import influx_db, redis_manager
+from app.core.mongodb import mongodb_manager
 from app.core.exceptions import DatabaseError
 
 
@@ -36,7 +37,53 @@ class MarketDataService:
     
     def _is_indian_stock(self, symbol: str) -> bool:
         """Check if symbol is an Indian stock"""
-        return symbol.endswith('.NS') or symbol.endswith('.BO') or (not '.' in symbol and len(symbol) <= 10)
+        normalized = symbol.upper().strip()
+        indian_indices = {
+            "NIFTY",
+            "NIFTY50",
+            "NIFTYBANK",
+            "BANKNIFTY",
+            "FINNIFTY",
+            "SENSEX",
+            "BANKEX",
+            "MIDCPNIFTY",
+        }
+
+        if normalized.endswith('.NS') or normalized.endswith('.BO'):
+            return True
+
+        if normalized in indian_indices:
+            return True
+
+        # India-first default for plain cash-equity style symbols.
+        return '.' not in normalized and '/' not in normalized and ':' not in normalized
+
+    def _has_real_itick_key(self) -> bool:
+        """Return true only when iTick key appears to be a configured non-placeholder value."""
+        return bool(settings.ITICK_API_KEY and not settings.ITICK_API_KEY.lower().startswith("your-"))
+
+    def _normalize_indian_symbol(self, symbol: str) -> str:
+        """Normalize Indian stock symbols to Yahoo-compatible NSE format when suffix is missing."""
+        alias_map = {
+            "NIFTY": "^NSEI",
+            "NIFTY50": "^NSEI",
+            "BANKNIFTY": "^NSEBANK",
+            "SENSEX": "^BSESN",
+            "USDINR": "INR=X",
+        }
+
+        upper_symbol = symbol.upper().strip()
+        if upper_symbol in alias_map:
+            return alias_map[upper_symbol]
+
+        if symbol.endswith('.NS') or symbol.endswith('.BO'):
+            return symbol
+
+        # Default to NSE for plain symbols in India-first setup.
+        if '.' not in symbol:
+            return f"{symbol}.NS"
+
+        return symbol
     
     def fetch_historical_data(
         self,
@@ -58,11 +105,7 @@ class MarketDataService:
             limit: Maximum number of candles
             asset_type: 'stock' or 'crypto'
         
-        Retu# Check if it's an Indian stock
-            if self._is_indian_stock(symbol):
-                return self._fetch_yfinance_data(symbol, interval, start_time, end_time)
-            else:
-                rns:
+        Returns:
             DataFrame with OHLCV data
         """
         if asset_type == "stock":
@@ -71,6 +114,92 @@ class MarketDataService:
             return self._fetch_crypto_data(symbol, interval, start_time, end_time, limit)
         else:
             raise ValueError(f"Unknown asset type: {asset_type}")
+
+    def _build_mongo_symbol_candidates(self, symbol: str) -> List[str]:
+        """Build symbol aliases that may exist in historical Mongo collections."""
+        clean = symbol.strip()
+        upper_symbol = clean.upper()
+        normalized = self._normalize_indian_symbol(upper_symbol)
+
+        candidates: List[str] = [clean, upper_symbol, normalized]
+
+        if normalized.endswith(".NS"):
+            candidates.append(normalized[:-3])
+        if normalized.endswith(".BO"):
+            candidates.append(normalized[:-3])
+
+        if upper_symbol in {"NIFTY", "NIFTY50"}:
+            candidates.extend(["^NSEI"])
+        if upper_symbol == "BANKNIFTY":
+            candidates.extend(["^NSEBANK", "NIFTYBANK"])
+        if upper_symbol == "SENSEX":
+            candidates.extend(["^BSESN"])
+
+        # Preserve order while removing duplicates.
+        return list(dict.fromkeys(candidates))
+
+    def _fetch_mongo_historical_data(
+        self,
+        symbol: str,
+        interval: str,
+        start_time: Optional[datetime],
+        end_time: Optional[datetime],
+    ) -> Optional[pd.DataFrame]:
+        """Fetch OHLCV history from MongoDB if present; return None when unavailable."""
+        try:
+            collection = mongodb_manager.get_collection("market_data")
+            symbol_candidates = self._build_mongo_symbol_candidates(symbol)
+
+            query = {
+                "symbol": {"$in": symbol_candidates},
+                "interval": interval,
+            }
+
+            if start_time or end_time:
+                query["timestamp"] = {}
+                if start_time:
+                    query["timestamp"]["$gte"] = start_time
+                if end_time:
+                    query["timestamp"]["$lte"] = end_time
+
+            cursor = collection.find(query).sort("timestamp", 1)
+            records = list(cursor)
+
+            if not records:
+                return None
+
+            df = pd.DataFrame(records)
+            if df.empty:
+                return None
+
+            if "_id" in df.columns:
+                df = df.drop(columns=["_id"])
+
+            # Handle older dumps that used uppercase OHLCV keys.
+            df.columns = [c.lower() for c in df.columns]
+            if "date" in df.columns and "timestamp" not in df.columns:
+                df = df.rename(columns={"date": "timestamp"})
+
+            required_cols = ["open", "high", "low", "close", "volume"]
+            if "timestamp" not in df.columns or not all(col in df.columns for col in required_cols):
+                return None
+
+            df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+            df = df.dropna(subset=["timestamp"])
+            if df.empty:
+                return None
+
+            for col in required_cols:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+            df = df.dropna(subset=required_cols)
+            if df.empty:
+                return None
+
+            df = df.sort_values("timestamp").set_index("timestamp")
+            return df[required_cols]
+        except Exception:
+            return None
     
     def _fetch_stock_data(
         self,
@@ -80,13 +209,23 @@ class MarketDataService:
         end_time: Optional[datetime]
     ) -> pd.DataFrame:
         """Fetch stock data from appropriate source (Alpaca/Yahoo/iTick)"""
+        mongo_df = self._fetch_mongo_historical_data(symbol, interval, start_time, end_time)
+        if mongo_df is not None and not mongo_df.empty:
+            return mongo_df
+
         # Check if it's an Indian stock
         if self._is_indian_stock(symbol):
-            # For historical data older than yfinance limits, use itick
-            if start_time and (datetime.now() - start_time).days > 365:
-                return self._fetch_itick_data(symbol, interval, start_time, end_time)
-            else:
-                return self._fetch_yfinance_data(symbol, interval, start_time, end_time)
+            normalized_symbol = self._normalize_indian_symbol(symbol)
+
+            # Use iTick first whenever configured for Indian-market historical candles.
+            if self._has_real_itick_key():
+                try:
+                    return self._fetch_itick_data(normalized_symbol, interval, start_time, end_time)
+                except Exception:
+                    # Fall back to Yahoo if iTick call fails for any reason.
+                    pass
+
+            return self._fetch_yfinance_data(normalized_symbol, interval, start_time, end_time)
         
         # For US stocks, use Alpaca
         return self._fetch_alpaca_data(symbol, interval, start_time, end_time)
@@ -224,7 +363,7 @@ class MarketDataService:
             base_url = settings.ITICK_API_URL or "https://api.itick.in/api/v1"
             api_key = settings.ITICK_API_KEY
             
-            if not api_key:
+            if not self._has_real_itick_key():
                 raise DatabaseError("iTick API key not configured")
             
             # Format dates for iTick API
@@ -396,12 +535,34 @@ class MarketDataService:
         Returns:
             Latest price
         """
-        # For Indian stocks, use yfinance's faster current price method
-        if asset_type == "stock" and self._is_indian_stock(symbol):
+        # Crypto: use exchange ticker directly for latest trade price.
+        if asset_type == "crypto":
             try:
-                ticker = yf.Ticker(symbol)
+                ticker = self.ccxt_exchange.fetch_ticker(symbol)
+                if ticker and ticker.get("last") is not None:
+                    return float(ticker["last"])
+            except Exception:
+                pass
+
+        # For Indian stocks, use iTick first (if configured), then Yahoo fast info.
+        if asset_type == "stock" and self._is_indian_stock(symbol):
+            if self._has_real_itick_key():
+                try:
+                    quote_df = self._fetch_itick_data(symbol, interval="1m", start_time=datetime.now() - timedelta(days=1), end_time=datetime.now())
+                    if not quote_df.empty:
+                        itick_price = float(quote_df["close"].iloc[-1])
+                        if itick_price > 0:
+                            return itick_price
+                except Exception:
+                    pass
+
+            try:
+                normalized_symbol = self._normalize_indian_symbol(symbol)
+                ticker = yf.Ticker(normalized_symbol)
                 info = ticker.fast_info
-                return float(info.get('last_price', info.get('previous_close', 0)))
+                yf_price = float(info.get('last_price', info.get('previous_close', 0)))
+                if yf_price > 0:
+                    return yf_price
             except:
                 # Fallback to historical data
                 pass

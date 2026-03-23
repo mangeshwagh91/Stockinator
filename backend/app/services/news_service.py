@@ -4,7 +4,9 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
-import openai
+from openai import OpenAI
+from urllib.parse import urljoin
+import re
 
 from app.core.config import settings
 from app.models.news import News
@@ -13,12 +15,266 @@ from app.schemas.news import NewsCreate, NewsSentimentUpdate
 
 class NewsService:
     """Service for news scraping and LLM sentiment analysis"""
+
+    NEWS_SOURCES = {
+        "Reuters": "https://www.reuters.com/",
+        "BBC": "https://www.bbc.com/",
+        "The Guardian": "https://www.theguardian.com/international",
+        "The Hindu": "https://www.thehindu.com/",
+        "Indian Express": "https://indianexpress.com/",
+        "Times of India": "https://timesofindia.indiatimes.com/",
+    }
+
+    RSS_SOURCES = {
+        "Reuters": "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best",
+        "BBC": "https://feeds.bbci.co.uk/news/business/rss.xml",
+        "The Guardian": "https://www.theguardian.com/business/rss",
+        "The Hindu": "https://www.thehindu.com/business/feeder/default.rss",
+        "Indian Express": "https://indianexpress.com/section/business/feed/",
+        "Times of India": "https://timesofindia.indiatimes.com/rssfeeds/1898055.cms",
+    }
+
+    MARKET_IMPACT_KEYWORDS = {
+        "rbi", "repo", "reverse repo", "inflation", "gdp", "fii", "dii", "sensex", "nifty",
+        "bank nifty", "rupee", "usd", "dollar", "bond", "g-sec", "yield", "crude", "oil",
+        "gas", "coal", "metals", "gold", "silver", "earnings", "results", "guidance", "ipo",
+        "sebi", "finance ministry", "budget", "tax", "tariff", "sanction", "war", "fed",
+        "interest rate", "rate hike", "rate cut", "china", "us economy", "export", "import",
+        "banking", "it sector", "auto sector", "pharma", "fmcg", "telecom", "infrastructure",
+    }
+
+    SYMBOL_KEYWORD_MAP = {
+        "bank nifty": "BANKNIFTY",
+        "nifty": "NIFTY",
+        "sensex": "SENSEX",
+        "rupee": "USDINR",
+        "usd": "USDINR",
+        "crude": "CRUDEOIL",
+        "oil": "CRUDEOIL",
+        "it": "NIFTYIT",
+        "auto": "NIFTYAUTO",
+        "pharma": "NIFTYPHARMA",
+        "fmcg": "NIFTYFMCG",
+        "bank": "NIFTYBANK",
+    }
     
     def __init__(self):
         self.news_api_key = settings.NEWS_API_KEY
         self.openai_api_key = settings.OPENAI_API_KEY
-        if self.openai_api_key:
-            openai.api_key = self.openai_api_key
+        self.openai_client: Optional[OpenAI] = None
+        if self._has_real_openai_key():
+            self.openai_client = OpenAI(api_key=self.openai_api_key)
+
+    def _has_real_news_key(self) -> bool:
+        return bool(self.news_api_key and not self.news_api_key.lower().startswith("your-"))
+
+    def _has_real_openai_key(self) -> bool:
+        return bool(self.openai_api_key and not self.openai_api_key.lower().startswith("your-"))
+
+    def _normalize_title(self, text: str) -> str:
+        normalized = re.sub(r"[^a-z0-9\s]", " ", text.lower())
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
+
+    def _fingerprint_title(self, text: str) -> str:
+        normalized = self._normalize_title(text)
+        tokens = [t for t in normalized.split(" ") if len(t) > 2]
+        return " ".join(sorted(set(tokens)))
+
+    def _is_market_impacting(self, title: str, description: str = "") -> bool:
+        haystack = f"{title} {description}".lower()
+        return any(keyword in haystack for keyword in self.MARKET_IMPACT_KEYWORDS)
+
+    def _infer_symbol(self, title: str, description: str = "") -> str:
+        haystack = f"{title} {description}".lower()
+        for keyword, symbol in self.SYMBOL_KEYWORD_MAP.items():
+            if keyword in haystack:
+                return symbol
+        return "INDIA_MARKET"
+
+    def scrape_headlines_from_source(self, source_name: str, source_url: str, timeout: int = 10) -> List[Dict]:
+        """Scrape candidate headlines from a source homepage using BeautifulSoup."""
+        try:
+            response = requests.get(
+                source_url,
+                timeout=timeout,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+        except Exception as e:
+            print(f"Error scraping {source_name}: {e}")
+            return []
+
+        candidates: List[Dict] = []
+        seen_links = set()
+
+        for a_tag in soup.select("a[href]"):
+            href = (a_tag.get("href") or "").strip()
+            title = " ".join(a_tag.get_text(" ", strip=True).split())
+
+            if not href or href.startswith("#") or href.startswith("javascript:"):
+                continue
+            if len(title) < 35 or len(title) > 240:
+                continue
+
+            full_url = urljoin(source_url, href)
+            if full_url in seen_links:
+                continue
+
+            seen_links.add(full_url)
+            candidates.append(
+                {
+                    "title": title,
+                    "url": full_url,
+                    "source": source_name,
+                    "description": "",
+                    "published_at": None,
+                }
+            )
+
+            if len(candidates) >= 120:
+                break
+
+        return candidates
+
+    def scrape_headlines_from_rss(self, source_name: str, rss_url: str, timeout: int = 10) -> List[Dict]:
+        """Fallback RSS scraper for sources that limit homepage scraping."""
+        try:
+            response = requests.get(
+                rss_url,
+                timeout=timeout,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                },
+            )
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "xml")
+        except Exception as e:
+            print(f"Error scraping RSS for {source_name}: {e}")
+            return []
+
+        items: List[Dict] = []
+        for entry in soup.find_all("item")[:120]:
+            title = (entry.title.text or "").strip() if entry.title else ""
+            link = (entry.link.text or "").strip() if entry.link else ""
+            description = (entry.description.text or "").strip() if entry.description else ""
+
+            if len(title) < 20:
+                continue
+
+            items.append(
+                {
+                    "title": title,
+                    "url": link,
+                    "source": source_name,
+                    "description": description,
+                    "published_at": None,
+                }
+            )
+
+        return items
+
+    def fetch_market_impact_news_from_sources(self) -> List[Dict]:
+        """Scrape configured sites, filter market-impact news, and deduplicate across sources."""
+        all_candidates: List[Dict] = []
+        for source_name, source_url in self.NEWS_SOURCES.items():
+            source_items = self.scrape_headlines_from_source(source_name, source_url)
+            if not source_items and source_name in self.RSS_SOURCES:
+                source_items = self.scrape_headlines_from_rss(source_name, self.RSS_SOURCES[source_name])
+
+            all_candidates.extend(source_items)
+
+        unique_by_fp: Dict[str, Dict] = {}
+        for item in all_candidates:
+            title = item.get("title", "")
+            if not title:
+                continue
+
+            if not self._is_market_impacting(title, item.get("description", "")):
+                continue
+
+            item["symbol"] = self._infer_symbol(title, item.get("description", ""))
+            fp = self._fingerprint_title(title)
+
+            if fp in unique_by_fp:
+                existing = unique_by_fp[fp]
+                existing_sources = set((existing.get("source") or "").split(", "))
+                existing_sources.add(item.get("source", ""))
+                existing["source"] = ", ".join(sorted(s for s in existing_sources if s))
+                continue
+
+            unique_by_fp[fp] = item
+
+        return list(unique_by_fp.values())
+
+    def save_scraped_news_to_db(self, articles: List[Dict], db: Session) -> int:
+        """Persist deduplicated scraped articles with sentiment and impact labels."""
+        if not articles:
+            return 0
+
+        cutoff_time = datetime.now() - timedelta(days=2)
+        recent_rows = db.query(News).filter(News.created_at >= cutoff_time).all()
+
+        recent_by_url = {row.url for row in recent_rows if row.url}
+        recent_by_fp: Dict[str, News] = {
+            self._fingerprint_title(row.title): row for row in recent_rows if row.title
+        }
+
+        saved_count = 0
+        for article in articles:
+            title = (article.get("title") or "").strip()
+            if not title:
+                continue
+
+            url = article.get("url")
+            if url and url in recent_by_url:
+                continue
+
+            fp = self._fingerprint_title(title)
+            duplicate_row = recent_by_fp.get(fp)
+            if duplicate_row:
+                incoming_source = article.get("source") or ""
+                if incoming_source and incoming_source not in (duplicate_row.source or ""):
+                    merged = ", ".join(sorted(set((duplicate_row.source or "").split(", ")) | {incoming_source}))
+                    duplicate_row.source = merged.strip(", ")
+                    duplicate_row.processed_at = datetime.now()
+                continue
+
+            sentiment_data = self.analyze_sentiment_with_llm(
+                title=title,
+                description=article.get("description") or "",
+                content=article.get("content"),
+            )
+
+            news = News(
+                symbol=article.get("symbol") or "INDIA_MARKET",
+                title=title,
+                url=url,
+                source=article.get("source"),
+                author=article.get("author"),
+                description=article.get("description"),
+                content=article.get("content"),
+                sentiment=sentiment_data["sentiment"],
+                sentiment_score=sentiment_data["sentiment_score"],
+                impact_score=max(0.4, sentiment_data.get("impact_score", 0.5)),
+                llm_summary=sentiment_data.get("llm_summary"),
+                llm_model=sentiment_data.get("llm_model"),
+                published_at=article.get("published_at"),
+                processed_at=datetime.now(),
+            )
+
+            db.add(news)
+            saved_count += 1
+            if url:
+                recent_by_url.add(url)
+            recent_by_fp[fp] = news
+
+        db.commit()
+        return saved_count
     
     def fetch_news_from_api(self, symbol: str, days: int = 1) -> List[Dict]:
         """
@@ -31,14 +287,14 @@ class NewsService:
         Returns:
             List of news articles
         """
-        if not self.news_api_key:
+        if not self._has_real_news_key():
             return []
         
         from_date = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
         
         url = "https://newsapi.org/v2/everything"
         params = {
-            'q': symbol,
+            'q': f"{symbol} AND (NSE OR BSE OR India)",
             'from': from_date,
             'sortBy': 'publishedAt',
             'apiKey': self.news_api_key,
@@ -106,7 +362,7 @@ class NewsService:
         Returns:
             Dictionary with sentiment analysis
         """
-        if not self.openai_api_key:
+        if not self.openai_client:
             # Fallback to simple keyword-based sentiment
             return self._simple_sentiment_analysis(title, description)
         
@@ -128,17 +384,17 @@ Summary: [brief summary of why this matters for trading]
 Focus on the implications for stock price movement."""
         
         try:
-            response = openai.ChatCompletion.create(
+            response = self.openai_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": "You are a financial news analyst expert in sentiment analysis for trading."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
-                max_tokens=200
+                max_tokens=200,
             )
             
-            result_text = response.choices[0].message.content
+            result_text = response.choices[0].message.content or ""
             
             # Parse response
             sentiment_data = self._parse_llm_response(result_text)

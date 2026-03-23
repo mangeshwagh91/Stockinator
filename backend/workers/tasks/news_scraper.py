@@ -3,44 +3,26 @@ from workers.celery_app import celery_app
 from app.core.database import SessionLocal
 from app.services.news_service import news_service
 
-
-# Watchlist of symbols to monitor
-WATCHLIST = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'NVDA', 'AMD', 'META']
-
-
 @celery_app.task(name='scrape_news_for_watchlist')
 def scrape_news_for_watchlist():
     """
-    Periodically scrape news for all symbols in watchlist
+    Periodically scrape configured global + Indian news websites,
+    filter stock-market-impact stories, deduplicate, and persist to DB.
     """
     db = SessionLocal()
     
     try:
-        print("📰 Starting news scraping for watchlist...")
-        total_saved = 0
-        
-        for symbol in WATCHLIST:
-            try:
-                # Fetch news from API
-                articles = news_service.fetch_news_from_api(symbol, days=1)
-                
-                if articles:
-                    # Save to database with sentiment analysis
-                    saved_count = news_service.save_news_to_db(symbol, articles, db)
-                    total_saved += saved_count
-                    
-                    print(f"✓ {symbol}: Fetched {len(articles)}, Saved {saved_count} new articles")
-                else:
-                    print(f"⚠️ {symbol}: No articles found")
-            
-            except Exception as e:
-                print(f"❌ Error scraping news for {symbol}: {e}")
-        
-        print(f"📰 News scraping completed. Total saved: {total_saved}")
+        print("📰 Starting source-based news scraping...")
+
+        articles = news_service.fetch_market_impact_news_from_sources()
+        total_saved = news_service.save_scraped_news_to_db(articles, db)
+
+        print(f"📰 Source scraping completed. Candidates={len(articles)} Saved={total_saved}")
         
         return {
             "status": "completed",
-            "symbols_processed": len(WATCHLIST),
+            "sources_processed": len(news_service.NEWS_SOURCES),
+            "candidates": len(articles),
             "articles_saved": total_saved
         }
     

@@ -30,9 +30,9 @@ celery_app.conf.update(
 
 # Periodic task schedule
 celery_app.conf.beat_schedule = {
-    'scrape-news-every-5-minutes': {
+    'scrape-news-every-15-seconds': {
         'task': 'workers.tasks.news_scraper.scrape_news_for_watchlist',
-        'schedule': 300.0,  # Every 5 minutes
+        'schedule': 15.0,  # Every 15 seconds
     },
     'retrain-model-daily': {
         'task': 'workers.tasks.model_retrain.retrain_model_task',

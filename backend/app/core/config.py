@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     ALPACA_API_KEY: str = ""
     ALPACA_SECRET_KEY: str = ""
     ALPACA_BASE_URL: str = "https://paper-api.alpaca.markets"
+
+    # Upstox (Indian market)
+    UPSTOX_API_KEY: str = ""
+    UPSTOX_SECRET_KEY: str = ""
+    UPSTOX_ACCESS_TOKEN: str = ""
+    UPSTOX_API_URL: str = "https://api.upstox.com/v2"
     
     # iTick API (for Indian market historical data)
     ITICK_API_KEY: str = ""

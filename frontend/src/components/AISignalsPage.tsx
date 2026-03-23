@@ -182,9 +182,9 @@ const AISignalsPage: React.FC = () => {
           <button className="px-5 py-1.5 rounded-md text-[11px] font-bold tracking-wide bg-[#1a1f26] text-white border border-white/10 shadow-lg uppercase flex items-center gap-2">
             <BarChart3 size={12} className="text-blue-400" /> AI SIGNALS
           </button>
-          <button className="px-4 py-1.5 rounded-md text-[11px] font-semibold tracking-wide text-slate-400 hover:text-white transition-all uppercase flex items-center gap-2">
+          <Link to="/positions" className="px-4 py-1.5 rounded-md text-[11px] font-semibold tracking-wide text-slate-400 hover:text-white transition-all uppercase flex items-center gap-2">
             <Briefcase size={12} /> PORTFOLIO
-          </button>
+          </Link>
         </div>
 
         <div className="flex items-center gap-4">

@@ -50,6 +50,21 @@ class IndicatorService:
         out["stochastic_d"] = out["stochastic_k"].rolling(window=3, min_periods=1).mean()
         out["roc"] = (close.pct_change(periods=10) * 100).fillna(0.0)
 
+        highest_14 = high.rolling(window=14, min_periods=1).max()
+        out["williams_r"] = (((highest_14 - close) / denom) * -100).fillna(-50.0)
+
+        tp = (high + low + close) / 3
+        tp_sma = tp.rolling(window=20, min_periods=1).mean()
+        tp_mad = tp.rolling(window=20, min_periods=1).apply(lambda x: np.mean(np.abs(x - np.mean(x))), raw=True)
+        out["cci"] = ((tp - tp_sma) / (0.015 * tp_mad.replace(0, np.nan))).fillna(0.0)
+
+        tenkan = (high.rolling(window=9, min_periods=1).max() + low.rolling(window=9, min_periods=1).min()) / 2
+        kijun = (high.rolling(window=26, min_periods=1).max() + low.rolling(window=26, min_periods=1).min()) / 2
+        out["ichimoku_tenkan"] = tenkan
+        out["ichimoku_kijun"] = kijun
+        out["ichimoku_senkou_a"] = ((tenkan + kijun) / 2).shift(26)
+        out["ichimoku_senkou_b"] = ((high.rolling(window=52, min_periods=1).max() + low.rolling(window=52, min_periods=1).min()) / 2).shift(26)
+
         out["bollinger_middle"] = close.rolling(window=20, min_periods=1).mean()
         rolling_std = close.rolling(window=20, min_periods=1).std().fillna(0.0)
         out["bollinger_upper"] = out["bollinger_middle"] + (2 * rolling_std)
@@ -122,6 +137,15 @@ class IndicatorService:
         # Trend strength
         df = self._calculate_trend_strength(df)
         
+        # Ichimoku (Custom pandas implementation for both fallback/TA-Lib)
+        high, low = df['high'], df['low']
+        tenkan = (high.rolling(window=9, min_periods=1).max() + low.rolling(window=9, min_periods=1).min()) / 2
+        kijun = (high.rolling(window=26, min_periods=1).max() + low.rolling(window=26, min_periods=1).min()) / 2
+        df["ichimoku_tenkan"] = tenkan
+        df["ichimoku_kijun"] = kijun
+        df["ichimoku_senkou_a"] = ((tenkan + kijun) / 2).shift(26)
+        df["ichimoku_senkou_b"] = ((high.rolling(window=52, min_periods=1).max() + low.rolling(window=52, min_periods=1).min()) / 2).shift(26)
+        
         return df
     
     def _calculate_moving_averages(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -168,6 +192,12 @@ class IndicatorService:
         )
         df['stochastic_k'] = slowk
         df['stochastic_d'] = slowd
+        
+        # Williams %R
+        df['williams_r'] = talib.WILLR(high, low, close, timeperiod=14)
+        
+        # CCI
+        df['cci'] = talib.CCI(high, low, close, timeperiod=14)
         
         # ROC - Rate of Change
         df['roc'] = talib.ROC(close, timeperiod=10)
@@ -246,6 +276,8 @@ class IndicatorService:
             'macd_histogram': latest.get('macd_histogram', 0.0),
             'stochastic_k': latest.get('stochastic_k', 50.0),
             'stochastic_d': latest.get('stochastic_d', 50.0),
+            'williams_r': latest.get('williams_r', -50.0),
+            'cci': latest.get('cci', 0.0),
             'roc': latest.get('roc', 0.0),
             
             # Trend

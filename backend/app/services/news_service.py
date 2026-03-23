@@ -62,8 +62,17 @@ class NewsService:
         self.news_api_key = settings.NEWS_API_KEY
         self.openai_api_key = settings.OPENAI_API_KEY
         self.openai_client: Optional[OpenAI] = None
+        
         if self._has_real_openai_key():
             self.openai_client = OpenAI(api_key=self.openai_api_key)
+            self.llm_model = settings.OPENAI_MODEL
+        else:
+            # Fallback to local Ollama (OpenAI API compatible)
+            self.openai_client = OpenAI(
+                base_url=settings.OLLAMA_BASE_URL,
+                api_key="ollama" # Required but ignored
+            )
+            self.llm_model = settings.OLLAMA_MODEL
 
     def _has_real_news_key(self) -> bool:
         return bool(self.news_api_key and not self.news_api_key.lower().startswith("your-"))
@@ -363,7 +372,7 @@ class NewsService:
             Dictionary with sentiment analysis
         """
         if not self.openai_client:
-            # Fallback to simple keyword-based sentiment
+            # Fallback to simple keyword-based sentiment if both OpenAI and Ollama fail setup (unlikely)
             return self._simple_sentiment_analysis(title, description)
         
         # Construct prompt
@@ -385,7 +394,7 @@ Focus on the implications for stock price movement."""
         
         try:
             response = self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
+                model=self.llm_model,
                 messages=[
                     {"role": "system", "content": "You are a financial news analyst expert in sentiment analysis for trading."},
                     {"role": "user", "content": prompt},
@@ -398,7 +407,7 @@ Focus on the implications for stock price movement."""
             
             # Parse response
             sentiment_data = self._parse_llm_response(result_text)
-            sentiment_data['llm_model'] = settings.OPENAI_MODEL
+            sentiment_data['llm_model'] = self.llm_model
             
             return sentiment_data
         except Exception as e:

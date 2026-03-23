@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4"
     
+    # Ollama Local LLM
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    OLLAMA_MODEL: str = "llama3"
+    
     # News API
     NEWS_API_KEY: str = ""
     
@@ -67,7 +71,7 @@ class Settings(BaseSettings):
     MAX_POSITION_SIZE: float = 10000.0
     
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:8080"]
     
     @property
     def database_url(self) -> str:

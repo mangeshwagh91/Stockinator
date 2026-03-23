@@ -12,6 +12,7 @@ import News from "@/pages/News";
 import Indicators from "@/pages/Indicators";
 import Risk from "@/pages/Risk";
 import SettingsPage from "@/pages/SettingsPage";
+import TradeLog from "@/pages/TradeLog";
 import SystemControl from "@/pages/SystemControl";
 import NotFound from "./pages/NotFound";
 
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/trending" element={<Trending />} />
           <Route path="/positions" element={<Positions />} />
           <Route path="/news" element={<News />} />
+          <Route path="/history" element={<TradeLog />} />
           <Route path="/indicators" element={<Indicators />} />
           <Route path="/risk" element={<Risk />} />
           <Route path="/system" element={<SystemControl />} />

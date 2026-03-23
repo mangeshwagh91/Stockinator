@@ -16,7 +16,9 @@ import { Candle } from '@/services/api';
 function toTime(ts: string): Time {
   const d = new Date(ts);
   if (isNaN(d.getTime())) return ts.slice(0, 10) as Time;
-  return Math.floor(d.getTime() / 1000) as unknown as Time;
+  // Shift timestamp by +5:30 (19800 seconds) to render visually in IST time
+  const IST_OFFSET = 5.5 * 60 * 60;
+  return Math.floor(d.getTime() / 1000 + IST_OFFSET) as unknown as Time;
 }
 
 function candleToLW(c: Candle): CandlestickData {

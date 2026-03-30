@@ -20,7 +20,7 @@ redis==5.0.1
 # Data Processing & Indicators
 pandas==2.2.0
 numpy==1.26.3
-ta-lib==0.4.28
+ta-lib>=0.4.28
 scikit-learn==1.4.0
 xgboost==2.0.3
 yfinance>=1.2.0

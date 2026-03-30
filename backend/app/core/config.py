@@ -69,13 +69,18 @@ class Settings(BaseSettings):
     MAX_POSITION_SIZE: float = 10000.0
     
     # CORS
-    CORS_ORIGINS: str | List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: str | List[str] = [
+        "http://localhost:5173", 
+        "http://localhost:3000",
+        "https://stockinator-five.vercel.app"
+    ]
 
     @property
     def cors_origins_list(self) -> List[str]:
         if isinstance(self.CORS_ORIGINS, str):
-            # Parse comma-separated list or JSON-like string if needed
-            return [x.strip() for x in self.CORS_ORIGINS.split(",") if x.strip()]
+            # If it's a JSON-like string, clean it up
+            clean_str = self.CORS_ORIGINS.strip('[]"')
+            return [x.strip(' \'"') for x in clean_str.split(',')]
         return self.CORS_ORIGINS
     
     @property

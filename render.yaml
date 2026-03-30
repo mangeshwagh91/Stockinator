@@ -1,0 +1,176 @@
+services:
+  - type: web
+    name: stockinator
+    env: docker
+    region: oregon 
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: "uvicorn app.main:app --host 0.0.0.0 --port 10000"
+    plan: free
+    healthCheckPath: /docs
+    envVars:
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: stockinator-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: stockinator-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: stockinator-db
+          property: password
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: stockinator-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: stockinator-db
+          property: port
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: INFLUX_URL
+        value: "fill-with-influx-cloud-url"
+      - key: INFLUX_TOKEN
+        value: "fill-with-influx-cloud-token"
+      - key: INFLUX_ORG
+        value: "stockinator"
+      - key: INFLUX_BUCKET
+        value: "market_data"
+      # CORS for Vercel Frontend
+      - key: FRONTEND_URL
+        value: "https://your-vercel-domain.vercel.app"
+
+  - type: worker
+    name: stockinator-celery-worker
+    env: docker
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: "celery -A workers.celery_app worker --loglevel=info"
+    plan: free
+    envVars:
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: stockinator-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: stockinator-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: stockinator-db
+          property: password
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: stockinator-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: stockinator-db
+          property: port
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: INFLUX_URL
+        value: "fill-with-influx-cloud-url"
+      - key: INFLUX_TOKEN
+        value: "fill-with-influx-cloud-token"
+      - key: INFLUX_ORG
+        value: "stockinator"
+      - key: INFLUX_BUCKET
+        value: "market_data"
+
+  - type: worker
+    name: stockinator-celery-beat
+    env: docker
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: "celery -A workers.celery_app beat --loglevel=info"
+    plan: free
+    envVars:
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: stockinator-db
+          property: database
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: stockinator-db
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: stockinator-db
+          property: password
+      - key: POSTGRES_HOST
+        fromDatabase:
+          name: stockinator-db
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: stockinator-db
+          property: port
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          type: redis
+          name: stockinator-redis
+          property: connectionString
+      - key: INFLUX_URL
+        value: "fill-with-influx-cloud-url"
+      - key: INFLUX_TOKEN
+        value: "fill-with-influx-cloud-token"
+      - key: INFLUX_ORG
+        value: "stockinator"
+      - key: INFLUX_BUCKET
+        value: "market_data"
+
+  - type: redis
+    name: stockinator-redis
+    region: oregon
+    plan: free
+    maxmemoryPolicy: noeviction
+
+databases:
+  - name: stockinator-db
+    databaseName: stockinator
+    user: stockinator
+    region: oregon
+    plan: free

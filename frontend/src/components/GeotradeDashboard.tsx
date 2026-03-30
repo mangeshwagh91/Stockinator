@@ -116,9 +116,9 @@ const GeotradeDashboard = () => {
             <Link to="/signals" className="px-5 py-1.5 rounded-md text-[11px] font-semibold tracking-wide text-slate-400 hover:text-white transition-all uppercase flex items-center gap-2">
               <BarChart3 size={12} /> AI SIGNALS
             </Link>
-            <Link to="/positions" className="px-4 py-1.5 rounded-md text-[11px] font-semibold tracking-wide text-slate-400 hover:text-white transition-all uppercase flex items-center gap-2">
+            <button className="px-4 py-1.5 rounded-md text-[11px] font-semibold tracking-wide text-slate-400 hover:text-white transition-all uppercase flex items-center gap-2">
               <Briefcase size={12} /> PORTFOLIO
-            </Link>
+            </button>
           </div>
           
           <div className="flex items-center gap-4">

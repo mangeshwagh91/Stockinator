@@ -1,11 +1,8 @@
-import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import GeoGlobe from "@/components/GeoGlobe";
 import { backendApi } from "@/lib/backendApi";
 
 const Dashboard = () => {
-  const queryClient = useQueryClient();
-
   const { data: status } = useQuery({
     queryKey: ["system-status"],
     queryFn: backendApi.getSystemStatus,
@@ -19,29 +16,6 @@ const Dashboard = () => {
     refetchInterval: 25000,
     retry: 1,
   });
-
-  useEffect(() => {
-    const base = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
-    const wsUrl = base.replace(/^http/, "ws") + "/api/v1/ws/live";
-    const ws = new WebSocket(wsUrl);
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "tick") {
-          queryClient.setQueryData(["price", data.symbol], (old: any) => ({
-            ...old,
-            price: data.price,
-            timestamp: data.timestamp
-          }));
-        }
-      } catch (err) {
-        console.error("WS error", err);
-      }
-    };
-
-    return () => ws.close();
-  }, [queryClient]);
 
   const gtiValue = status ? Math.max(35, Math.min(95, 70 + (status.risk_metrics.daily_loss_used_pct ?? 0) * 0.12)) : 71.4;
 

@@ -53,17 +53,50 @@ class TradeAgent:
         entry: float,
         atr: float,
         quantity: float,
+        strategy: str = "atr",
     ) -> TradePlan:
-        """Create a trade plan with SL/TP based on ATR."""
-        if side == "BUY":
-            stop_loss = entry - (atr * 1.5)
-            take_profit = entry + (atr * 3.0)
-        elif side == "SELL":
-            stop_loss = entry + (atr * 1.5)
-            take_profit = entry - (atr * 3.0)
+        """Create a trade plan with SL/TP based on the specified strategy."""
+        
+        # Apply different strategies for Stop Loss and Take Profit
+        if strategy == "atr":
+            # Standard ATR based (1.5x SL, 3.0x TP)
+            sl_mult, tp_mult = 1.5, 3.0
+            if side == "BUY":
+                stop_loss = entry - (atr * sl_mult)
+                take_profit = entry + (atr * tp_mult)
+            elif side == "SELL":
+                stop_loss = entry + (atr * sl_mult)
+                take_profit = entry - (atr * tp_mult)
+            else:
+                stop_loss = take_profit = entry
+                
+        elif strategy == "fixed_pct":
+            # Fixed Percentage based (2% SL, 4% TP)
+            sl_pct, tp_pct = 0.02, 0.04
+            if side == "BUY":
+                stop_loss = entry * (1 - sl_pct)
+                take_profit = entry * (1 + tp_pct)
+            elif side == "SELL":
+                stop_loss = entry * (1 + sl_pct)
+                take_profit = entry * (1 - tp_pct)
+            else:
+                stop_loss = take_profit = entry
+                
+        elif strategy == "scalp":
+            # Quick Scalping based on narrow ATR (0.5x SL, 1.0x TP)
+            sl_mult, tp_mult = 0.5, 1.0
+            if side == "BUY":
+                stop_loss = entry - (atr * sl_mult)
+                take_profit = entry + (atr * tp_mult)
+            elif side == "SELL":
+                stop_loss = entry + (atr * sl_mult)
+                take_profit = entry - (atr * tp_mult)
+            else:
+                stop_loss = take_profit = entry
+                
         else:
-            stop_loss = entry
-            take_profit = entry
+            # Fallback
+            stop_loss = take_profit = entry
 
         sl_dist = abs(entry - stop_loss)
         tp_dist = abs(take_profit - entry)

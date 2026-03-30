@@ -202,7 +202,7 @@ const AISignalsPage: React.FC = () => {
           <div className="px-4 mb-4">
             <span className="text-[10px] font-bold text-slate-500 tracking-[0.18em] uppercase">Market Segments</span>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 space-y-0.5">
+          <div className="flex-1 overflow-y-auto custom-scrollbar px-3 space-y-0.5">
             {segments.map((seg) => (
               <button
                 key={seg}
@@ -255,7 +255,7 @@ const AISignalsPage: React.FC = () => {
           </div>
 
           {/* List */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1.5">
             {isLoading ? (
               // Skeleton
               Array.from({ length: 6 }).map((_, i) => (

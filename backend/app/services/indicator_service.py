@@ -28,7 +28,9 @@ class IndicatorService:
         out["sma_20"] = close.rolling(window=20, min_periods=1).mean()
         out["sma_50"] = close.rolling(window=50, min_periods=1).mean()
         out["sma_200"] = close.rolling(window=200, min_periods=1).mean()
+        out["ema_9"] = close.ewm(span=9, adjust=False).mean()
         out["ema_12"] = close.ewm(span=12, adjust=False).mean()
+        out["ema_15"] = close.ewm(span=15, adjust=False).mean()
         out["ema_26"] = close.ewm(span=26, adjust=False).mean()
 
         delta = close.diff().fillna(0.0)
@@ -146,7 +148,26 @@ class IndicatorService:
         df["ichimoku_senkou_a"] = ((tenkan + kijun) / 2).shift(26)
         df["ichimoku_senkou_b"] = ((high.rolling(window=52, min_periods=1).max() + low.rolling(window=52, min_periods=1).min()) / 2).shift(26)
         
+        # Calculate EMA slope for scalping strategy
+        if "ema_9" in df.columns:
+            df["ema_9_slope"] = self._calculate_ema_slope(df["ema_9"])
+        else:
+            df["ema_9_slope"] = 0.0
+
         return df
+
+    def _calculate_ema_slope(self, series: pd.Series, lookback: int = 5) -> pd.Series:
+        """Calculate the angle of the EMA in degrees over a lookback period."""
+        def calc_slope(y):
+            if len(y) < 2: return 0.0
+            x = np.arange(len(y))
+            # Linear regression slope
+            slope, _ = np.polyfit(x, y, 1)
+            # Normalize to approximate a reasonable degree on a chart
+            angle = np.degrees(np.arctan(slope / max(y.mean(), 1) * 100))
+            return abs(angle)
+        
+        return series.rolling(window=lookback).apply(calc_slope, raw=True).fillna(0.0)
     
     def _calculate_moving_averages(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate moving averages"""
@@ -158,7 +179,9 @@ class IndicatorService:
         df['sma_200'] = talib.SMA(close, timeperiod=200)
         
         # Exponential Moving Averages
+        df['ema_9'] = talib.EMA(close, timeperiod=9)
         df['ema_12'] = talib.EMA(close, timeperiod=12)
+        df['ema_15'] = talib.EMA(close, timeperiod=15)
         df['ema_26'] = talib.EMA(close, timeperiod=26)
         
         return df
@@ -283,8 +306,11 @@ class IndicatorService:
             # Trend
             'sma_20': latest.get('sma_20', latest['close']),
             'sma_50': latest.get('sma_50', latest['close']),
+            'ema_9': latest.get('ema_9', latest['close']),
             'ema_12': latest.get('ema_12', latest['close']),
+            'ema_15': latest.get('ema_15', latest['close']),
             'ema_26': latest.get('ema_26', latest['close']),
+            'ema_9_slope': latest.get('ema_9_slope', 0.0),
             
             # Volatility
             'atr': latest.get('atr', 0.0),

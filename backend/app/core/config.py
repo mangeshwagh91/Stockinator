@@ -37,11 +37,9 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
     
-    # OpenAI
+    # OpenAI / Ollama
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4"
-    
-    # Ollama Local LLM
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     OLLAMA_MODEL: str = "llama3"
     
@@ -71,7 +69,7 @@ class Settings(BaseSettings):
     MAX_POSITION_SIZE: float = 10000.0
     
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000", "http://localhost:8080", "http://127.0.0.1:8080"]
+    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
     
     @property
     def database_url(self) -> str:

@@ -41,7 +41,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
             <span />
           </div>
           <div>
-            <div className="geo-brand">GEOTRADE</div>
+            <div className="geo-brand">STOCKINATOR</div>
             <div className="geo-brand-sub">TRADER V2.0</div>
           </div>
           <div className="geo-gti-wrap">

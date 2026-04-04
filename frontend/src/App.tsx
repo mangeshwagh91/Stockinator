@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./App.css";
-import GeotradeDashboard from "@/components/GeotradeDashboard";
+import StockinatorDashboard from "@/components/StockinatorDashboard";
 import AISignalsPage from "@/components/AISignalsPage";
 import Trending from "@/pages/Trending";
 import Positions from "@/pages/Positions";
@@ -24,7 +24,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<GeotradeDashboard />} />
+          <Route path="/" element={<StockinatorDashboard />} />
           <Route path="/signals" element={<AISignalsPage />} />
           <Route path="/trending" element={<Trending />} />
           <Route path="/positions" element={<Positions />} />

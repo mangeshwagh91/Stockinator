@@ -15,7 +15,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import GlobeScene from "./GlobeScene";
 
-const GeotradeDashboard = () => {
+const StockinatorDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -87,7 +87,7 @@ const GeotradeDashboard = () => {
                 <Zap size={18} className="text-white fill-white" />
               </div>
               <div className="flex flex-col leading-none">
-                <span className="text-xs font-black tracking-widest text-white uppercase">GEOTRADE</span>
+                <span className="text-xs font-black tracking-widest text-white uppercase">STOCKINATOR</span>
                 <span className="text-[10px] font-semibold text-slate-500 tracking-tight mt-0.5 uppercase">TRADER v2.0</span>
               </div>
             </div>
@@ -221,4 +221,4 @@ const GeotradeDashboard = () => {
   );
 };
 
-export default GeotradeDashboard;
+export default StockinatorDashboard;

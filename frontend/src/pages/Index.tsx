@@ -1,7 +1,7 @@
-import GeotradeDashboard from "@/components/GeotradeDashboard";
+import StockinatorDashboard from "@/components/StockinatorDashboard";
 
 const Index = () => {
-  return <GeotradeDashboard />;
+  return <StockinatorDashboard />;
 };
 
 export default Index;

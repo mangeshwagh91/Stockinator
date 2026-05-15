@@ -164,7 +164,36 @@ async def memory_win_rate(symbol: Optional[str] = None):
     return orchestrator.memory.win_rate(symbol)
 
 
-# ── Agent health ─────────────────────────────────────────────────────────
+# ── Backtest endpoints ───────────────────────────────────────────────────────
+
+class BacktestRequest(BaseModel):
+    symbol: str = "RELIANCE"
+    period: str = "1y"
+
+@router.post("/backtest")
+async def run_backtest(payload: BacktestRequest):
+    """Run signal-replay backtest for a single symbol. Returns Sharpe, win rate, max drawdown."""
+    from app.services.backtest_service import BacktestService
+    bt = BacktestService(threshold=orchestrator.threshold)
+    sym = payload.symbol.upper()
+    if not sym.endswith(".NS") and "." not in sym:
+        sym += ".NS"
+    result = await run_in_threadpool(bt.run, sym, payload.period)
+    return result.to_dict()
+
+
+@router.post("/backtest/portfolio")
+async def run_portfolio_backtest(symbols: Optional[List[str]] = None, period: str = "1y"):
+    """Run backtest for a list of symbols (defaults to top-10 watchlist)."""
+    from app.services.backtest_service import BacktestService
+    bt = BacktestService(threshold=orchestrator.threshold)
+    syms = symbols or [s for s in WATCHLIST[:10]]
+    nse_syms = [s + ".NS" if "." not in s else s for s in syms]
+    result = await run_in_threadpool(bt.run_portfolio, nse_syms, period)
+    return result
+
+
+# ── Agent health ─────────────────────────────────────────────────────────────
 
 @router.get("/health")
 async def agent_health():

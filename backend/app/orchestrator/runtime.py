@@ -1,6 +1,6 @@
 """Central orchestrator: chains all agents in a DAG workflow.
 
-DAG Flow: Scrape → Algo → Predict → Decide → Trade → Memory
+DAG Flow: Scrape → Algo → Vision → Predict → Decide → Trade → Memory
 Each step passes data to the next. Transparent decision gating at every stage.
 """
 
@@ -11,6 +11,7 @@ import logging
 
 from app.agents.scraping_agent import ScrapingAgent
 from app.agents.algo_agent import AlgoAgent
+from app.agents.vision_agent import VisionAgent
 from app.agents.prediction_agent import PredictionAgent
 from app.agents.trade_agent import TradeAgent
 from app.agents.memory_agent import MemoryAgent
@@ -36,6 +37,12 @@ class CycleResult:
     neutral_count: int = 0
     indicators: Dict[str, Any] = field(default_factory=dict)
     patterns: List[str] = field(default_factory=list)
+    # Step 2.5: Vision
+    vision_pattern: str = "no_pattern"
+    vision_direction: str = "HOLD"
+    vision_score: float = 50.0
+    vision_confidence: float = 0.5
+    vision_model: str = "rule_based"
     # Step 3: Predict
     success_score: float = 50.0
     ml_score: float = 50.0
@@ -66,6 +73,7 @@ class Orchestrator:
         self.paper = paper
         self.scraper = ScrapingAgent()
         self.algo = AlgoAgent()
+        self.vision = VisionAgent()
         self.predictor = PredictionAgent()
         self.trader = TradeAgent()
         self.memory = MemoryAgent()
@@ -136,12 +144,27 @@ class Orchestrator:
             result.errors.append(f"Algo failed: {str(e)}")
             logger.error(f"Algo failed for {symbol}: {e}")
 
+        # ── Step 2.5: VISION ────────────────────────────────────────────
+        try:
+            vision_sig = self.vision.analyse(symbol, candles)
+            result.vision_pattern = vision_sig.pattern
+            result.vision_direction = vision_sig.direction
+            result.vision_score = vision_sig.vision_score
+            result.vision_confidence = vision_sig.confidence
+            result.vision_model = vision_sig.model_used
+            result.cycle_steps.append("vision_pattern_detection")
+        except Exception as e:
+            result.errors.append(f"Vision failed: {str(e)}")
+            logger.warning(f"Vision failed for {symbol}: {e}")
+
         # ── Step 3: PREDICT ──────────────────────────────────────────────
         try:
+            # Blend vision score into algo_score (10% weight)
+            blended_algo = result.algo_score * 0.90 + result.vision_score * 0.10
             prediction = self.predictor.predict(
                 symbol=symbol,
                 indicator_features=result.indicators,
-                algo_consensus_score=result.algo_score,
+                algo_consensus_score=blended_algo,
                 news_sentiment=result.news_sentiment,
             )
             result.success_score = prediction.success_score
@@ -238,9 +261,11 @@ class Orchestrator:
             "orchestrator": "ready" if not self._halted else "halted",
             "threshold": self.threshold,
             "paper_trading": self.paper,
+            "dag": "Scrape → Algo → Vision → Predict → Decide → Trade → Memory",
             "agents": {
                 "scraper": self.scraper.health(),
                 "algo": {"agent": self.algo.name, "status": "ready"},
+                "vision": self.vision.health(),
                 "predictor": {"agent": self.predictor.name, "status": "ready"},
                 "trader": {"agent": self.trader.name, "status": "ready"},
                 "memory": self.memory.health(),

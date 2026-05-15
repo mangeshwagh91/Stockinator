@@ -5,6 +5,7 @@ from app.agents.memory_agent import MemoryAgent
 from app.agents.prediction_agent import PredictionAgent
 from app.agents.scraping_agent import ScrapingAgent
 from app.agents.trade_agent import TradeAgent
+from app.agents.vision_agent import VisionAgent
 
 __all__ = [
     "ScrapingAgent",
@@ -12,4 +13,5 @@ __all__ = [
     "PredictionAgent",
     "TradeAgent",
     "MemoryAgent",
+    "VisionAgent",
 ]

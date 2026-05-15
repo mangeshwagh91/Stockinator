@@ -48,10 +48,10 @@ except ImportError:
     _CV2_OK = False
 
 try:
-    import torch
-    import torch.nn as nn
-    import torchvision.models as tv_models
-    import torchvision.transforms as T
+    import torch  # type: ignore
+    import torch.nn as nn  # type: ignore
+    from torchvision import models as tv_models  # type: ignore
+    from torchvision import transforms as T  # type: ignore
     _TORCH_OK = True
 except ImportError:
     _TORCH_OK = False

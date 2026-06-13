@@ -96,7 +96,7 @@ st.markdown("""
 @st.cache_resource
 def get_orchestrator():
     try:
-        from app.orchestrator.runtime import Orchestrator
+        from app.orchestrator.runtime import Orchestrator #type: ignore
         return Orchestrator(threshold=65.0, paper=True)
     except Exception:
         return None
@@ -104,7 +104,7 @@ def get_orchestrator():
 @st.cache_resource
 def get_backtest_service():
     try:
-        from app.services.backtest_service import BacktestService
+        from app.services.backtest_service import BacktestService #type: ignore
         return BacktestService(threshold=60.0, hold_days=5)
     except Exception:
         return None
@@ -112,7 +112,7 @@ def get_backtest_service():
 @st.cache_resource
 def get_vision_agent():
     try:
-        from app.agents.vision_agent import VisionAgent
+        from app.agents.vision_agent import VisionAgent #type: ignore
         return VisionAgent()
     except Exception:
         return None
@@ -203,7 +203,7 @@ def fetch_backtest(symbol: str, period: str = "1y") -> Dict:
 @st.cache_data(ttl=120)
 def fetch_news() -> List[Dict]:
     try:
-        from app.services.news_service import news_service
+        from app.services.news_service import news_service #type: ignore
         articles = news_service.fetch_market_impact_news_from_sources()
         out = []
         for a in articles[:10]:
@@ -234,10 +234,6 @@ def build_agent_statuses(cycle: Dict) -> List[Dict]:
     scraping_score = min(100, 50 + (cycle.get("news_sentiment", 50) - 50) * 0.5 + 15)
     algo_score     = float(cycle.get("algo_score", 50))
     pred_score     = float(cycle.get("success_score", 50))
-    vision_score   = float(cycle.get("vision_score", 50))
-    vision_pattern = cycle.get("vision_pattern", "no_pattern")
-    vision_dir     = cycle.get("vision_direction", "HOLD")
-    vision_model   = cycle.get("vision_model", "rule_based")
     trade_score    = pred_score
 
     return [
@@ -247,7 +243,7 @@ def build_agent_statuses(cycle: Dict) -> List[Dict]:
         {"name": "Prediction",  "signal": cycle.get("direction","HOLD"), "confidence": pred_score/100, "score": pred_score, "status": "ready", "detail": f"ML={cycle.get('ml_score',0):.1f} Combined={pred_score:.1f}"},
         {"name": "Algorithm",   "signal": sig(algo_score),     "confidence": algo_score/100,     "score": algo_score,     "status": "ready", "detail": f"Consensus={algo_score:.1f}/100"},
         {"name": "Aggregation", "signal": sig(pred_score),     "confidence": pred_score/100,     "score": pred_score,     "status": "partial","detail": "Memory + market_data pipeline"},
-        {"name": "Vision",      "signal": vision_dir,          "confidence": vision_score/100,   "score": vision_score,   "status": "partial","detail": f"{vision_pattern.replace('_',' ').title()} [{vision_model}]"},
+        {"name": "Vision",      "signal": "HOLD",              "confidence": 0.50,               "score": 50,             "status": "partial","detail": "Rule-based pattern detection"},
         {"name": "Trade",       "signal": cycle.get("action","HOLD"), "confidence": trade_score/100, "score": trade_score, "status": "ready", "detail": f"SL={cycle.get('trade_sl',0):.0f} TP={cycle.get('trade_tp',0):.0f}"},
     ]
 
